@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+*.tgz
+
+.build-sha
+**/.build-sha

@@ -1,0 +1,96 @@
+{
+  "name": "@vibecontrols/vibe-plugin-ai-openrouter",
+  "version": "2026.507.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "description": "OpenRouter AI agent provider for VibeControls Agent (SDK)",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "author": {
+    "name": "Vignesh T.V",
+    "email": "vignesh@burdenoff.com",
+    "url": "https://github.com/tvvignesh"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --minify-syntax --minify-whitespace --external elysia && tsc --emitDeclarationOnly --declaration --outDir ./dist",
+    "dev": "tsc --watch",
+    "lint": "eslint ./src",
+    "format": "bunx prettier . --write",
+    "format:check": "bunx prettier . --check",
+    "type:check": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "prebuild": "bun run clean",
+    "prepublishOnly": "bun run build",
+    "test": "bun test",
+    "sanity": "bun run format:check && bun run lint && bun run type:check && bun run build && bun run test"
+  },
+  "dependencies": {
+    "@openrouter/sdk": "^0.12.35",
+    "elysia": "^1.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "bun-types": "^1.3.9",
+    "eslint": "^9.30.1",
+    "globals": "^17.3.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.0"
+  },
+  "peerDependencies": {
+    "@vibecontrols/agent": ">=2.0.0",
+    "@vibecontrols/vibe-plugin-ai": "^2026.506.6"
+  },
+  "peerDependenciesMeta": {
+    "@vibecontrols/agent": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "vibecontrols",
+    "vibe",
+    "vibe-plugin",
+    "openrouter",
+    "ai",
+    "bun"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/algoshred/vibe-plugin-ai-openrouter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/algoshred/vibe-plugin-ai-openrouter/issues"
+  },
+  "homepage": "https://vibecontrols.com",
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://verdaccio.tooling.internal.burdenoff.com/"
+  },
+  "files": [
+    "dist/**/*",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "overrides": {
+    "lodash": ">=4.17.21",
+    "lodash-es": ">=4.17.21",
+    "dompurify": ">=3.3.4",
+    "fast-xml-parser": ">=4.5.5",
+    "@xmldom/xmldom": ">=0.8.12",
+    "swiper": ">=12.1.2",
+    "brace-expansion": ">=1.1.13",
+    "follow-redirects": ">=1.15.12",
+    "smol-toml": ">=1.6.1",
+    "axios": ">=1.15.0",
+    "flatted": ">=3.4.1",
+    "yaml": ">=2.8.3",
+    "picomatch": ">=2.3.2",
+    "immutable": ">=3.8.3",
+    "minimatch": ">=3.1.3"
+  }
+}
