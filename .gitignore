@@ -5,3 +5,4 @@ dist
 
 .build-sha
 **/.build-sha
+.boff/
