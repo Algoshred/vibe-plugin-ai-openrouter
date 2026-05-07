@@ -1,6 +1,6 @@
 {
   "name": "@vibecontrols/vibe-plugin-ai-openrouter",
-  "version": "2026.508.1",
+  "version": "2026.508.2",
   "type": "module",
   "main": "./dist/index.js",
   "description": "OpenRouter AI agent provider for VibeControls Agent (SDK)",

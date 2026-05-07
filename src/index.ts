@@ -49,7 +49,18 @@ interface AIFileAttachment {
   size: number;
 }
 
+interface PluginCapabilities {
+  storage?: "none" | "read" | "rw";
+  secrets?: "none" | "read" | "rw";
+  gateway?: boolean;
+  broadcast?: boolean;
+  subprocess?: boolean;
+  audit?: boolean;
+  telemetry?: boolean;
+}
+
 interface VibePlugin {
+  capabilities?: PluginCapabilities;
   name: string;
   version: string;
   description?: string;
@@ -78,6 +89,9 @@ interface VibePlugin {
 }
 
 interface HostServices {
+  telemetry?: {
+    emit: (name: string, payload?: Record<string, unknown>) => void;
+  };
   logger?: {
     info: (source: string, msg: string) => void;
     warn: (source: string, msg: string) => void;
@@ -1103,6 +1117,12 @@ function createPrereqsRoutes() {
 const provider = new OpenRouterProvider();
 
 export const vibePlugin: VibePlugin = {
+  capabilities: {
+    secrets: "read",
+    subprocess: true,
+    gateway: false,
+    telemetry: true,
+  },
   name: PROVIDER_NAME,
   version: "1.0.0",
   description: "OpenRouter AI agent provider for VibeControls (SDK)",
@@ -1113,6 +1133,7 @@ export const vibePlugin: VibePlugin = {
   createRoutes: () => createPrereqsRoutes(),
 
   onServerStart(_app, hostServices) {
+    hostServices?.telemetry?.emit("ai.provider.ready", { provider: "openrouter" });
     if (hostServices) provider.setHostServices(hostServices);
   },
 
