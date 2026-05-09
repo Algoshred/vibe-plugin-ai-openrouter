@@ -13,7 +13,11 @@
  */
 
 import { Elysia } from "elysia";
-import type { HostServices, VibePlugin } from "@vibecontrols/plugin-sdk";
+import type {
+  HostServices,
+  VibePlugin,
+  ProfileContext,
+} from "@vibecontrols/plugin-sdk";
 import {
   BoundLogger,
   ProviderRegistry,
@@ -1095,7 +1099,7 @@ type OpenRouterVibePlugin = VibePlugin & {
   providers?: { ai?: AIAgentProvider };
 };
 
-export const vibePlugin: OpenRouterVibePlugin = {
+export const createPlugin = (_ctx: ProfileContext): OpenRouterVibePlugin => ({
   capabilities: {
     secrets: "read",
     subprocess: true,
@@ -1112,6 +1116,4 @@ export const vibePlugin: OpenRouterVibePlugin = {
   createRoutes: () => createPrereqsRoutes(),
   onServerStart: lifecycle.onServerStart,
   onServerStop: lifecycle.onServerStop,
-};
-
-export default vibePlugin;
+});

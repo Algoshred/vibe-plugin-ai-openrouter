@@ -77,7 +77,8 @@ beforeAll(() => {
   }) as unknown as typeof fetch;
 });
 
-const { vibePlugin } = await import("../index.js");
+const { createPlugin } = await import("../index.js");
+const vibePlugin = createPlugin({ name: "test", dataDir: "/tmp" });
 
 const provider = vibePlugin.providers!.ai!;
 
