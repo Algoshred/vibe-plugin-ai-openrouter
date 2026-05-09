@@ -21,7 +21,7 @@
       },
       "peerDependencies": {
         "@vibecontrols/agent": ">=2.0.0",
-        "@vibecontrols/vibe-plugin-ai": "^2026.506.6",
+        "@vibecontrols/vibe-plugin-ai": "2026.509.1",
       },
       "optionalPeers": [
         "@vibecontrols/agent",
