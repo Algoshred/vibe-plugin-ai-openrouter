@@ -13,9 +13,16 @@
  */
 
 import { Elysia } from "elysia";
+import type { HostServices, VibePlugin } from "@vibecontrols/plugin-sdk";
+import {
+  BoundLogger,
+  ProviderRegistry,
+  TelemetryEmitter,
+  createLifecycleHooks,
+} from "@vibecontrols/plugin-sdk";
 
-// ── Locally Redeclared Interfaces ────────────────────────────────────────
-// (Avoid hard dependency on @vibecontrols/agent)
+// ── AI Provider Contract Types ──────────────────────────────────────────
+// (provider-specific contract — kept inline; not part of the SDK surface)
 
 type ProviderMode = "sdk" | "cli";
 
@@ -47,61 +54,6 @@ interface AIFileAttachment {
   mimeType: string;
   content: Buffer | string;
   size: number;
-}
-
-interface PluginCapabilities {
-  storage?: "none" | "read" | "rw";
-  secrets?: "none" | "read" | "rw";
-  gateway?: boolean;
-  broadcast?: boolean;
-  subprocess?: boolean;
-  audit?: boolean;
-  telemetry?: boolean;
-}
-
-interface VibePlugin {
-  capabilities?: PluginCapabilities;
-  name: string;
-  version: string;
-  description?: string;
-  tags?: Array<
-    "backend" | "frontend" | "cli" | "provider" | "adapter" | "integration"
-  >;
-  cliCommand?: string;
-  apiPrefix?: string;
-  prerequisites?: Array<{
-    name: string;
-    kind: "binary" | "npm" | "pip" | "cargo" | "manual";
-    requiresSudo: boolean;
-    description?: string;
-  }>;
-  createRoutes?: () => unknown;
-  providers?: { ai?: AIAgentProvider; [key: string]: unknown };
-  onServerStart?: (
-    app: unknown,
-    hostServices?: HostServices,
-  ) => void | Promise<void>;
-  onServerStop?: () => void | Promise<void>;
-  onCliSetup?: (
-    program: unknown,
-    hostServices?: HostServices,
-  ) => void | Promise<void>;
-}
-
-interface HostServices {
-  telemetry?: {
-    emit: (name: string, payload?: Record<string, unknown>) => void;
-  };
-  logger?: {
-    info: (source: string, msg: string) => void;
-    warn: (source: string, msg: string) => void;
-    error: (source: string, msg: string) => void;
-    debug: (source: string, msg: string) => void;
-  };
-  serviceRegistry?: {
-    getService: <T>(pluginName: string, serviceName: string) => T | undefined;
-  };
-  getConfig: (key: string) => string | undefined | Promise<string | undefined>;
 }
 
 type AISessionStatus =
@@ -595,15 +547,18 @@ class OpenRouterProvider implements AIAgentProvider {
   private sessions = new Map<string, ManagedSession>();
   private logIngester: LogIngester | null = null;
   private hostServices: HostServices | null = null;
+  private logger: BoundLogger | null = null;
   private adapter: ProviderAdapter | null = null;
   private cachedApiKey: string | undefined;
 
   setHostServices(hs: HostServices): void {
     this.hostServices = hs;
+    this.logger = new BoundLogger(hs.logger, `${PROVIDER_NAME}-provider`);
+    const registry = new ProviderRegistry(hs);
     this.logIngester =
-      hs.serviceRegistry?.getService<LogIngester>("ai", "log-ingester") ?? null;
+      registry.getProvider<LogIngester>("ai", "log-ingester") ?? null;
 
-    void Promise.resolve(hs.getConfig("OPENROUTER_API_KEY"))
+    void Promise.resolve(hs.getConfig?.("OPENROUTER_API_KEY"))
       .then((apiKey) => {
         const trimmed = apiKey?.trim();
         if (trimmed) this.cachedApiKey = trimmed;
@@ -628,7 +583,7 @@ class OpenRouterProvider implements AIAgentProvider {
     if (envApiKey) return envApiKey;
     if (this.cachedApiKey) return this.cachedApiKey;
 
-    if (this.hostServices) {
+    if (this.hostServices?.getConfig) {
       try {
         const apiKey = (
           await this.hostServices.getConfig("OPENROUTER_API_KEY")
@@ -1093,7 +1048,7 @@ class OpenRouterProvider implements AIAgentProvider {
   }
 
   private log(level: "info" | "error" | "debug", msg: string): void {
-    this.hostServices?.logger?.[level]?.(`${PROVIDER_NAME}-provider`, msg);
+    this.logger?.[level](msg);
   }
 }
 
@@ -1114,34 +1069,49 @@ function createPrereqsRoutes() {
     }));
 }
 
+const PLUGIN_NAME = "openrouter";
+const PLUGIN_VERSION = "1.0.0";
+
 const provider = new OpenRouterProvider();
 
-export const vibePlugin: VibePlugin = {
+const lifecycle = createLifecycleHooks({
+  name: PLUGIN_NAME,
+  telemetryEventName: "ai.provider.ready",
+  onInit: (hostServices: HostServices) => {
+    provider.setHostServices(hostServices);
+    new TelemetryEmitter(PLUGIN_NAME, PLUGIN_VERSION, hostServices).emit(
+      "ai.provider.ready",
+      { provider: PLUGIN_NAME },
+    );
+  },
+  onShutdown: () => {
+    for (const [id] of (provider as OpenRouterProvider)["sessions"]) {
+      provider.destroySession(id).catch(() => {});
+    }
+  },
+});
+
+type OpenRouterVibePlugin = VibePlugin & {
+  providers?: { ai?: AIAgentProvider };
+};
+
+export const vibePlugin: OpenRouterVibePlugin = {
   capabilities: {
     secrets: "read",
     subprocess: true,
     gateway: false,
     telemetry: true,
   },
-  name: PROVIDER_NAME,
-  version: "1.0.0",
+  name: PLUGIN_NAME,
+  version: PLUGIN_VERSION,
   description: "OpenRouter AI agent provider for VibeControls (SDK)",
   tags: ["provider", "integration"],
   apiPrefix: API_PREFIX,
   prerequisites: [],
   providers: { ai: provider },
   createRoutes: () => createPrereqsRoutes(),
-
-  onServerStart(_app, hostServices) {
-    hostServices?.telemetry?.emit("ai.provider.ready", { provider: "openrouter" });
-    if (hostServices) provider.setHostServices(hostServices);
-  },
-
-  onServerStop() {
-    for (const [id] of (provider as OpenRouterProvider)["sessions"]) {
-      provider.destroySession(id).catch(() => {});
-    }
-  },
+  onServerStart: lifecycle.onServerStart,
+  onServerStop: lifecycle.onServerStop,
 };
 
 export default vibePlugin;

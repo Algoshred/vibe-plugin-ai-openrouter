@@ -1,6 +1,6 @@
 {
   "name": "@vibecontrols/vibe-plugin-ai-openrouter",
-  "version": "2026.509.1",
+  "version": "2026.509.2",
   "type": "module",
   "main": "./dist/index.js",
   "description": "OpenRouter AI agent provider for VibeControls Agent (SDK)",
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@openrouter/sdk": "^0.12.35",
+    "@vibecontrols/plugin-sdk": "2026.509.1",
     "elysia": "^1.3.0"
   },
   "devDependencies": {
