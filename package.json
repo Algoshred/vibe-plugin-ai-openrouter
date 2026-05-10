@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@openrouter/sdk": "^0.12.35",
-    "@vibecontrols/plugin-sdk": "2026.509.1",
+    "@vibecontrols/plugin-sdk": "2026.509.2",
     "elysia": "^1.3.0"
   },
   "devDependencies": {
