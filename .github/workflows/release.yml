@@ -1,11 +1,14 @@
-# Release — Publish production release to npmjs as @vibecontrols/vibe-plugin-*
+# Release — publish a production release of @vibecontrols/vibe-plugin-* to npmjs
 #
-# Trigger: Manual workflow_dispatch or CalVer git tag push
+# Trigger: CalVer git tag push, or manual workflow_dispatch with an explicit version.
 # Publishes to: https://www.npmjs.com/ (public)
-# Also publishes same version to Verdaccio (private, internal)
 #
 # CalVer: YYYY.MDD.PATCH (semver-compatible, no zero-padding)
-# NPM token: NPMJS_VIBECONTROLS_TOKEN (granular token for @vibecontrols scope)
+# NPM token: NPMJS_VIBECONTROLS_TOKEN (repo secret, granular token for the @vibecontrols scope)
+#
+# BOFF-9610: runs on GitHub-hosted runners (the self-hosted org-runners /
+# frontend-runners pools are retired) and no longer publishes to the retired
+# Verdaccio registry.
 
 name: Release
 
@@ -16,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "CalVer version (e.g., 2026.323.1). Leave empty to auto-compute."
+        description: "CalVer version (e.g., 2026.323.1). Required for manual runs."
         required: false
         type: string
 
@@ -26,15 +29,15 @@ concurrency:
 
 jobs:
   release:
-    name: Release to npmjs + Verdaccio
-    runs-on: org-runners
+    name: Release to npmjs
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -44,7 +47,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Lint & type check
         run: bun run lint && bun run type:check
@@ -57,13 +60,17 @@ jobs:
 
       - name: Determine version
         id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           NAME=$(bun -e "console.log(require('./package.json').name)")
 
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.ref_name }}" ]; then
-            VERSION="${{ github.ref_name }}"
-          elif [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$REF_NAME" ]; then
+            VERSION="$REF_NAME"
+          elif [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
             echo "::error::workflow_dispatch requires an explicit 'version' input (auto-increment removed to stop version inflation)"
             exit 1
@@ -79,53 +86,43 @@ jobs:
           echo "Releasing: ${NAME}@$VERSION"
 
       - name: Publish to npmjs (public)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMJS_VIBECONTROLS_TOKEN }}
+          PKG_NAME: ${{ steps.version.outputs.name }}
+          PKG_VERSION: ${{ steps.version.outputs.version }}
         run: |
           cat > .npmrc << 'NPMRC'
           //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
           NPMRC
           sed -i 's/^ *//' .npmrc
-          bunx npm@latest version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
-          if bunx npm@latest view "${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}" version --registry "https://registry.npmjs.org/" >/dev/null 2>&1; then
-            echo "npmjs already has ${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}; skipping"
+          bunx npm@latest version "$PKG_VERSION" --no-git-tag-version --allow-same-version
+          if bunx npm@latest view "${PKG_NAME}@${PKG_VERSION}" version --registry "https://registry.npmjs.org/" >/dev/null 2>&1; then
+            echo "npmjs already has ${PKG_NAME}@${PKG_VERSION}; skipping"
           else
-            bunx npm@latest publish --registry "https://registry.npmjs.org/" --access public --ignore-scripts
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPMJS_VIBECONTROLS_TOKEN }}
-
-      - name: Publish to Verdaccio (private)
-        run: |
-          VERDACCIO_URL="https://registry.npmjs.org/"
-          AUTH=$(echo -n "ci-publisher:${{ secrets.VERDACCIO_CI_PASSWORD }}" | base64)
-          cat > .npmrc << NPMRC
-          registry=${VERDACCIO_URL}
-          //registry.npmjs.org/:_auth=${AUTH}
-          NPMRC
-          sed -i 's/^ *//' .npmrc
-          if bunx npm@latest view "${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}" version --registry "${VERDACCIO_URL}" >/dev/null 2>&1; then
-            echo "Verdaccio already has ${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}; skipping"
-          else
-            bunx npm@latest publish --registry "${VERDACCIO_URL}" --tag latest --access restricted --ignore-scripts
+            bunx npm@latest publish --registry "https://registry.npmjs.org/" --tag latest --access public --ignore-scripts
           fi
 
       - name: Create git tag (if manual dispatch)
         if: github.event_name == 'workflow_dispatch'
+        env:
+          PKG_NAME: ${{ steps.version.outputs.name }}
+          PKG_VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config --local user.email "oss@vibecontrols.com"
           git config --local user.name "CI"
-          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.version.outputs.version }} already exists; skipping"
+          if git rev-parse "$PKG_VERSION" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "$PKG_VERSION" >/dev/null 2>&1; then
+            echo "Tag $PKG_VERSION already exists; skipping"
           else
-            git tag "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}"
-            git push origin "${{ steps.version.outputs.version }}"
+            git tag "$PKG_VERSION" -m "Release ${PKG_NAME}@${PKG_VERSION}"
+            git push origin "$PKG_VERSION"
           fi
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          NAME="${{ steps.version.outputs.name }}"
           gh release create "$VERSION" \
             --title "${NAME}@${VERSION}" \
             --notes "## ${NAME}@${VERSION}
@@ -141,8 +138,12 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          echo "### Production Release" >> $GITHUB_STEP_SUMMARY
-          echo "**Package**: \`${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**npmjs**: Published or already present (public)" >> $GITHUB_STEP_SUMMARY
-          echo "**Verdaccio**: Published or already present (private)" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Production Release"
+            echo "**Package**: \`${NAME}@${VERSION}\`"
+            echo "**npmjs**: Published or already present (public)"
+          } >> "$GITHUB_STEP_SUMMARY"
